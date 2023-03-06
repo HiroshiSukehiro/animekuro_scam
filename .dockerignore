@@ -1,0 +1,15 @@
+/node_modules
+/dist
+/.git
+/.idea
+/pgdata
+/coverage
+*.md
+.gitignore
+.dockerignore
+Dockerfile
+.editorconfig
+*.env
+.env.example
+*.gql
+azure-pipelines.yml

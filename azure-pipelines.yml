@@ -1,0 +1,109 @@
+trigger:
+- dev-testing
+ 
+resources:
+- repo: self
+ 
+variables:
+  tag: 'testing'
+ 
+stages:
+- stage: Build
+  displayName: Build and push images
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: Docker@2
+      displayName: Build API
+      inputs:
+        command: build
+        repository: 'backend_api'
+        buildContext: '.'
+        containerRegistry: 'docker'
+        arguments: '--build-arg service=api'
+        dockerfile: 'Dockerfile'
+        tags: |
+          $(tag)
+    - task: Docker@2
+      displayName: Build statistic
+      inputs:
+        command: build
+        repository: 'backend_statistic'
+        buildContext: '.'
+        containerRegistry: 'docker'
+        arguments: '--build-arg service=statistic'
+        dockerfile: 'Dockerfile'
+        tags: |
+          $(tag)
+    - task: Docker@2
+      displayName: Push API
+      inputs:
+        command: push
+        repository: 'backend_api'
+        containerRegistry: 'docker'
+        tags: |
+          $(tag)
+    - task: Docker@2
+      displayName: Push statistic
+      inputs:
+        command: push
+        repository: 'backend_statistic'
+        containerRegistry: 'docker'
+        tags: |
+          $(tag)
+- stage: Test
+  displayName: Test
+  jobs:
+  - job: Test
+    displayName: Test
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '18.x'
+        displayName: 'Install Node.js'
+    - script: |
+        corepack enable pnpm
+      displayName: "Enable pnpm"
+    - script: |
+        pnpm install
+      displayName: "Install dependencies"
+    - script: |
+        pnpm test:ci
+      displayName: "Run tests and coverage"
+    - task: PublishTestResults@2
+      displayName: 'Publish test results'
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFiles: 'junit.xml'
+    - task: PublishCodeCoverageResults@1
+      displayName: 'Publish coverage'
+      inputs:
+        codeCoverageTool: Cobertura
+        summaryFileLocation: 'coverage/cobertura-coverage.xml'
+- stage: Deploy
+  jobs:
+    - deployment: Deploy
+      displayName: Deploy
+      pool:
+        vmImage: 'ubuntu-latest'
+      environment: 'development'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - task: SSH@0
+              inputs:
+                sshEndpoint: 'development'
+                runOptions: 'inline'
+                inline: |
+                  cd ~/infra/animakuro
+                  docker compose pull backend_dev_api 2>&1
+                  docker compose up -d backend_dev_api 2>&1
+                  docker compose pull backend_dev_statistic 2>&1
+                  docker compose up -d backend_dev_statistic 2>&1
+                readyTimeout: '20000'
